@@ -1,4 +1,4 @@
-/*! Raven.js 1.1.16 (463f68f) | github.com/getsentry/raven-js */
+/*! Raven.js 1.1.16 (e29930b) | github.com/getsentry/raven-js */
 
 /*
  * Includes TraceKit
@@ -645,7 +645,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
             return null;
         }
 
-        var chrome = /^\s*at (?:((?:\[object object\])?\S+(?: \[as \S+\])?) )?\(?((?:file|https?|chrome-extension):.*?):(\d+)(?::(\d+))?\)?\s*$/i,
+        var chrome = /^\s*at (.+?) ?\(?((?:file|https?|chrome-extension):.*?):(\d+)(?::(\d+))?\)?\s*$/i,
             gecko = /^\s*(\S*)(?:\((.*?)\))?@((?:file|https?|chrome).*?):(\d+)(?::(\d+))?\s*$/i,
             lines = ex.stack.split('\n'),
             stack = [],
@@ -1091,7 +1091,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
 // If there is no JSON, we no-op the core features of Raven
 // since JSON is required to encode the payload
 var _Raven = window.Raven,
-    hasJSON = !!(window.JSON && window.JSON.stringify),
+    hasJSON = !!(typeof JSON === 'object' && JSON.stringify),
     lastCapturedException,
     lastEventId,
     globalServer,
@@ -1106,10 +1106,13 @@ var _Raven = window.Raven,
         includePaths: [],
         collectWindowErrors: true,
         tags: {},
+        maxMessageLength: 100,
         extra: {}
     },
     authQueryString,
-    isRavenInstalled = false;
+    isRavenInstalled = false,
+
+    objectPrototype = Object.prototype;
 
 /*
  * The core Raven singleton
@@ -1319,7 +1322,7 @@ var Raven = {
      */
     captureException: function(ex, options) {
         // If not an Error is passed through, recall as a message instead
-        if (!(ex instanceof Error)) return Raven.captureMessage(ex, options);
+        if (!isError(ex)) return Raven.captureMessage(ex, options);
 
         // Store the raw exception object for potential debugging and introspection
         lastCapturedException = ex;
@@ -1486,9 +1489,21 @@ function isString(what) {
     return typeof what === 'string';
 }
 
+function isObject(what) {
+    return typeof what === 'object' && what !== null;
+}
+
 function isEmptyObject(what) {
     for (var k in what) return false;
     return true;
+}
+
+// Sorta yanked from https://github.com/joyent/node/blob/aa3b4b4/lib/util.js#L560
+// with some tiny modifications
+function isError(what) {
+    return isObject(what) &&
+        objectPrototype.toString.call(what) === '[object Error]' ||
+        what instanceof Error;
 }
 
 /**
@@ -1499,7 +1514,7 @@ function isEmptyObject(what) {
  * @param {string} key to check
  */
 function hasKey(object, key) {
-    return Object.prototype.hasOwnProperty.call(object, key);
+    return objectPrototype.hasOwnProperty.call(object, key);
 }
 
 function each(obj, callback) {
@@ -1658,7 +1673,7 @@ function processException(type, message, fileurl, lineno, frames, options) {
     }
 
     // Truncate the message to a max of characters
-    message = truncate(message, 100);
+    message = truncate(message, globalOptions.maxMessageLength);
 
     if (globalOptions.ignoreUrls && globalOptions.ignoreUrls.test(fileurl)) return;
     if (globalOptions.whitelistUrls && !globalOptions.whitelistUrls.test(fileurl)) return;
@@ -1828,11 +1843,15 @@ function afterLoad() {
 afterLoad();
 
 // Expose Raven to the world
-window.Raven = Raven;
-
-// AMD
 if (typeof define === 'function' && define.amd) {
+    // AMD
     define('raven', [], function() { return Raven; });
+} else if (typeof module === 'object') {
+    // CommonJS
+    module.exports = Raven;
+} else {
+    // Everything else
+    window.Raven = Raven;
 }
 
-})(this);
+})(window);
