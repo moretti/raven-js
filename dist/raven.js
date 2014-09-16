@@ -1,4 +1,4 @@
-/*! Raven.js 1.1.16 (4a37cf4) | github.com/getsentry/raven-js */
+/*! Raven.js 1.1.16 (c322c18) | github.com/getsentry/raven-js */
 
 /*
  * Includes TraceKit
@@ -1845,10 +1845,15 @@ afterLoad();
 // Expose Raven to the world
 if (typeof define === 'function' && define.amd) {
     // AMD
-    define('raven', [], function() { return Raven; });
+    define('raven', function(Raven) {
+      return (window.Raven = Raven);
+    });
 } else if (isObject(module)) {
-    // CommonJS
+    // browserify
     module.exports = Raven;
+} else if (isObject(exports)) {
+    // CommonJS
+    exports = Raven;
 } else {
     // Everything else
     window.Raven = Raven;
